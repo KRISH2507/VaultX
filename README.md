@@ -112,7 +112,21 @@ uvicorn app.main:app --reload --port 8000
 ```
 Interactive Swagger UI will be available at: `http://localhost:8000/api/v1/docs`
 
-### 5. Run Test Suite
+### 5. Run Celery Workers & Periodic Beat Scheduler
+```bash
+# Terminal 1: Run Celery Worker
+celery -A app.workers.celery_app.celery_app worker --loglevel=info
+
+# Terminal 2: Run Celery Beat Scheduler (polls pending Outbox events)
+celery -A app.workers.celery_app.celery_app beat --loglevel=info
+```
+
+### 6. Run Complete Stack via Docker Compose
+```bash
+docker compose up -d --build
+```
+
+### 7. Run Test Suite
 ```bash
 pytest
 ```

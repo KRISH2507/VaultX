@@ -1,3 +1,4 @@
+import time
 import uuid
 from typing import Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, status
@@ -7,6 +8,11 @@ from sqlalchemy.orm import selectinload
 import redis.asyncio as aioredis
 
 from app.core.database import get_db_session
+from app.core.metrics import (
+    TRANSFERS_TOTAL,
+    TRANSFER_DURATION_SECONDS,
+    ACTIVE_TRANSFER_LOCKS,
+)
 from app.core.redis import get_redis_client
 from app.models.transaction import Transaction
 from app.schemas.transaction import TransferCreate, TransactionResponse, PostingResponse
@@ -44,6 +50,8 @@ async def execute_transfer(
     Transfers balance atomically between two accounts with strict double-entry invariants,
     deadlock-free deterministic lock sequencing, and distributed idempotency.
     """
+    start_time = time.perf_counter()
+    ACTIVE_TRANSFER_LOCKS.inc()
     try:
         response = await LedgerTransferService.transfer(
             db=db,
@@ -52,44 +60,55 @@ async def execute_transfer(
             transfer_data=data,
         )
         await db.commit()
+        duration = time.perf_counter() - start_time
+        TRANSFER_DURATION_SECONDS.observe(duration)
+        TRANSFERS_TOTAL.labels(status="committed").inc()
         return response
 
     except IdempotencyConflictError as e:
         await db.rollback()
+        TRANSFERS_TOTAL.labels(status="conflict").inc()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(e),
         )
     except IdempotencyPayloadMismatchError as e:
         await db.rollback()
+        TRANSFERS_TOTAL.labels(status="payload_mismatch").inc()
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e),
         )
     except InsufficientBalanceError as e:
         await db.rollback()
+        TRANSFERS_TOTAL.labels(status="insufficient_balance").inc()
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e),
         )
     except AccountNotFoundError as e:
         await db.rollback()
+        TRANSFERS_TOTAL.labels(status="account_not_found").inc()
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
     except AccountCurrencyMismatchError as e:
         await db.rollback()
+        TRANSFERS_TOTAL.labels(status="currency_mismatch").inc()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
     except Exception as e:
         await db.rollback()
+        TRANSFERS_TOTAL.labels(status="error").inc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Internal ledger transfer error: {str(e)}",
         )
+    finally:
+        ACTIVE_TRANSFER_LOCKS.dec()
 
 
 @router.get(

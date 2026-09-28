@@ -122,11 +122,48 @@ celery -A app.workers.celery_app.celery_app beat --loglevel=info
 ```
 
 ### 6. Run Complete Stack via Docker Compose
+Includes API, PostgreSQL, Redis, Celery Worker, Celery Beat, Prometheus, and Grafana:
 ```bash
 docker compose up -d --build
 ```
+- **FastAPI Documentation:** [http://localhost:8000/api/v1/docs](http://localhost:8000/api/v1/docs)
+- **Prometheus Metrics Target:** [http://localhost:8000/metrics](http://localhost:8000/metrics)
+- **Grafana Live Dashboard:** [http://localhost:3000](http://localhost:3000) (User: `admin`, Password: `admin`)
 
 ### 7. Run Test Suite
 ```bash
 pytest
+```
+
+---
+
+## High-Concurrency Benchmark Suite (k6)
+
+VaultX includes a comprehensive k6 load testing suite designed to stress-test ACID properties, row lock contention, and idempotency mechanisms under extreme traffic:
+
+### 1. Benchmark 1: High-Throughput Transfers (10,000+ RPS)
+Simulates sustained concurrent balance transfers across accounts, validating sub-10ms p99 settlement latency:
+```bash
+k6 run benchmarks/01_high_throughput_transfers.js
+```
+
+### 2. Benchmark 2: "Hot Account" Contention (500 Concurrent Threads)
+Simulates a high-traffic merchant receiving transfers from 500 concurrent workers simultaneously, proving mathematically and experimentally that our lexicographical row-locking (`sort_account_ids_for_locking`) results in **zero PostgreSQL deadlocks**:
+```bash
+k6 run benchmarks/02_hot_account_contention.js
+```
+
+### 3. Benchmark 3: Idempotency Retry Storm (1,000 Duplicate Requests)
+Simulates network failure replay storms sending identical `Idempotency-Key` headers, proving exact single-execution semantics and zero double-debiting:
+```bash
+k6 run benchmarks/03_idempotency_retry_storm.js
+```
+
+### Run Entire Benchmark Suite Automatically:
+```bash
+# Windows PowerShell
+.\benchmarks\run_benchmarks.ps1
+
+# Linux / macOS
+./benchmarks/run_benchmarks.sh
 ```

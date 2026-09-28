@@ -68,6 +68,21 @@
 
 ---
 
+## API Endpoints
+
+| Method | Endpoint | Description | Headers |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/health` | Liveness health check | - |
+| `GET` | `/metrics` | Prometheus metrics scrape target | - |
+| `POST` | `/api/v1/accounts` | Create financial account | - |
+| `GET` | `/api/v1/accounts/{id}` | Retrieve account details | - |
+| `GET` | `/api/v1/accounts/{id}/balance` | Real-time balance and version | - |
+| `POST` | `/api/v1/accounts/{id}/deposit` | Deposit funds | `Idempotency-Key` (optional) |
+| `POST` | `/api/v1/transfers` | Execute atomic double-entry transfer | `Idempotency-Key` (required) |
+| `GET` | `/api/v1/transfers/{id}` | Get transaction details with postings | - |
+
+---
+
 ## Getting Started
 
 ### 1. Setup Virtual Environment
@@ -81,7 +96,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Start Infrastructure
+### 2. Start Infrastructure (Docker)
 ```bash
 docker compose up -d postgres redis
 ```
@@ -91,7 +106,13 @@ docker compose up -d postgres redis
 alembic upgrade head
 ```
 
-### 4. Run Test Suite
+### 4. Run Development Server
+```bash
+uvicorn app.main:app --reload --port 8000
+```
+Interactive Swagger UI will be available at: `http://localhost:8000/api/v1/docs`
+
+### 5. Run Test Suite
 ```bash
 pytest
 ```

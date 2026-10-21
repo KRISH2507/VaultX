@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.api.v1.router import api_v1_router
@@ -22,8 +23,8 @@ app = FastAPI(
         "providing sub-10ms ACID writes, zero double-spending, and distributed idempotency."
     ),
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
-    docs_url=f"{settings.API_V1_STR}/docs",
-    redoc_url=f"{settings.API_V1_STR}/redoc",
+    docs_url="/docs",
+    redoc_url="/redoc",
     lifespan=lifespan,
 )
 
@@ -41,6 +42,18 @@ Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
 # Mount API Routers
 app.include_router(api_v1_router, prefix=settings.API_V1_STR)
+
+
+@app.get("/", include_in_schema=False)
+async def root():
+    """Redirect root path to Swagger UI documentation."""
+    return RedirectResponse(url="/docs")
+
+
+@app.get(f"{settings.API_V1_STR}/docs", include_in_schema=False)
+async def api_docs_alias():
+    """Redirect legacy /api/v1/docs path to /docs."""
+    return RedirectResponse(url="/docs")
 
 
 @app.get("/health", tags=["Health"])
